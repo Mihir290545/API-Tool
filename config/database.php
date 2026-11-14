@@ -1,7 +1,14 @@
 <?php
 /**
  * DevDock Database Configuration (PDO)
+ * Automatically detects production config file if available, or falls back to .env / defaults.
  */
+
+// If a dedicated production config exists on the server, load it first
+$prodConfig = __DIR__ . '/database.prod.php';
+if (file_exists($prodConfig)) {
+    return require $prodConfig;
+}
 
 return [
     'driver' => 'mysql',

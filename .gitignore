@@ -1,6 +1,8 @@
 # Environment & local secrets
 .env
 .env.local
+.env.production
+config/database.prod.php
 
 # Storage & logs
 storage/logs/*.log

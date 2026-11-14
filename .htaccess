@@ -1,0 +1,20 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Prevent direct access to private directories and configuration files
+    RewriteRule ^(app|config|database|storage|docs)/ - [F,L]
+    RewriteRule ^(\.env|\.git|\.gitignore|composer\.(json|lock)|README\.md) - [F,L]
+
+    # If already accessing /public, let public/.htaccess handle it
+    RewriteCond %{REQUEST_URI} ^/public/ [NC]
+    RewriteRule ^ - [L]
+
+    # Transparently route all other requests to public directory
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Fallback directory protection for older Apache versions
+<FilesMatch "^\.env|database\.prod\.php|schema\.sql">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

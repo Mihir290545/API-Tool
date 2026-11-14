@@ -1,10 +1,18 @@
+<?php
+// Compute base path dynamically so it works seamlessly on any domain, subfolder, or port
+$scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+$baseDir = rtrim(dirname($scriptName), '/');
+$baseUrl = ($baseDir === '' || $baseDir === '/') ? '' : $baseDir;
+$apiBaseUrl = $baseUrl . '/api';
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="api-base" content="<?= htmlspecialchars($apiBaseUrl, ENT_QUOTES, 'UTF-8') ?>">
   <title>DevDock — API Development & Testing Platform</title>
-  <link rel="stylesheet" href="/api-tool/public/assets/css/style.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8') ?>/assets/css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'><rect width='24' height='24' rx='6'/><path d='M7 8l5 4-5 4M13 16h4' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 </head>
 <body>
@@ -329,6 +337,6 @@
     </div>
   </div>
 
-  <script src="/api-tool/public/assets/js/app.js"></script>
+  <script src="<?= htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8') ?>/assets/js/app.js"></script>
 </body>
 </html>

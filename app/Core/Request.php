@@ -22,11 +22,17 @@ class Request
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $path = parse_url($uri, PHP_URL_PATH);
         
-        // Remove base path if served in subdirectory (e.g. /api-tool/public)
-        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-        $baseDir = dirname($scriptName);
-        if ($baseDir !== '/' && str_starts_with($path, $baseDir)) {
+        // Remove base path if served in subdirectory (e.g. /api-tool/public or /api-tool)
+        $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+        $baseDir = rtrim(dirname($scriptName), '/');
+        if (!empty($baseDir) && $baseDir !== '/' && str_starts_with($path, $baseDir)) {
             $path = substr($path, strlen($baseDir));
+        } else {
+            // Check parent baseDir if rewritten from root (e.g. /api-tool rewritten to /api-tool/public)
+            $parentBaseDir = rtrim(dirname($baseDir), '/');
+            if (!empty($parentBaseDir) && $parentBaseDir !== '/' && str_starts_with($path, $parentBaseDir)) {
+                $path = substr($path, strlen($parentBaseDir));
+            }
         }
 
         $this->uri = '/' . trim($path, '/');

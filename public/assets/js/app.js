@@ -19,7 +19,7 @@ const App = {
     rawResponse: null,
   },
 
-  apiBase: '/api-tool/public/api',
+  apiBase: document.querySelector('meta[name="api-base"]')?.getAttribute('content') || '/api',
 
   init() {
     this.applyTheme(this.state.theme);

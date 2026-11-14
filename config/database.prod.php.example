@@ -1,0 +1,23 @@
+<?php
+/**
+ * DevDock Production Database Configuration Example
+ * Rename this file to 'database.prod.php' and fill in your InfinityFree credentials.
+ * This file is ignored by Git and will never be exposed publicly.
+ */
+
+return [
+    'driver' => 'mysql',
+    'host' => 'sql123.infinityfree.com',     // e.g. sql100.infinityfree.com or sql200.epizy.com
+    'port' => 3306,
+    'database' => 'epiz_12345678_devdock',   // Your full database name with epiz_ prefix
+    'username' => 'epiz_12345678',           // Your InfinityFree MySQL username
+    'password' => 'YOUR_VPANEL_PASSWORD',    // Your InfinityFree account password
+    'charset' => 'utf8mb4',
+    'collation' => 'utf8mb4_unicode_ci',
+    'options' => [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
+    ],
+];

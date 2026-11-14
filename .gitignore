@@ -1,0 +1,16 @@
+# Environment & local secrets
+.env
+.env.local
+
+# Storage & logs
+storage/logs/*.log
+storage/cache/*
+!storage/cache/.gitkeep
+!storage/logs/.gitkeep
+
+# Operating system & editor files
+.DS_Store
+Thumbs.db
+*.tmp
+.vscode/
+.idea/

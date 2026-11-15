@@ -53,8 +53,13 @@ $router->put('/api/collections/{id}', [ApiController::class, 'updateCollection']
 $router->delete('/api/collections/{id}', [ApiController::class, 'deleteCollection']);
 
 $router->post('/api/requests', [ApiController::class, 'saveRequest']);
+$router->put('/api/requests/{id}', [ApiController::class, 'saveRequest']);
 $router->get('/api/requests/{id}', [ApiController::class, 'getRequest']);
 $router->delete('/api/requests/{id}', [ApiController::class, 'deleteRequest']);
+$router->get('/api/requests/{id}/curl', [ApiController::class, 'generateCurl']);
+
+$router->get('/api/collections/{id}/export', [ApiController::class, 'exportCollection']);
+$router->post('/api/collections/import', [ApiController::class, 'importCollection']);
 
 // -----------------------------------------------------------------------------
 // Environments & Variables Endpoints

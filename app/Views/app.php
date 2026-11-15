@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Compute base path dynamically so it works seamlessly on any domain, subfolder, or port
 $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
 $baseDir = rtrim(dirname($scriptName), '/');
@@ -36,6 +36,28 @@ $apiBaseUrl = $baseUrl . '/api';
         </select>
       </div>
 
+      <!-- User Menu -->
+      <div id="user-menu-wrapper" style="display: none;">
+        <div class="env-selector" style="cursor: pointer;" id="user-menu-trigger">
+          <span style="font-size: 11px; color: var(--text-muted);">👤</span>
+          <span id="user-menu-name" style="font-size: 12px; font-weight: 500; color: var(--text-primary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+          <span style="font-size: 10px; color: var(--text-muted);">▼</span>
+        </div>
+        <div id="user-dropdown" style="display: none; position: absolute; right: 60px; top: 48px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; min-width: 160px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+          <div style="padding: 8px 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 4px;">
+            <div style="font-size: 11px; color: var(--text-muted);">Signed in as</div>
+            <div id="user-dropdown-email" style="font-size: 12px; font-weight: 600; color: var(--text-primary);"></div>
+          </div>
+          <button class="btn btn-sm" id="btn-logout" style="width: 100%; text-align: left; padding: 6px 12px; background: transparent; color: var(--text-secondary);">Sign Out</button>
+        </div>
+      </div>
+
+      <!-- Manage Environments Button -->
+      <button id="btn-manage-envs" class="btn-icon" title="Manage Environments" style="font-size: 14px;">⚙</button>
+
+      <!-- Code Generator Button -->
+      <button id="btn-curl-gen" class="btn btn-sm" title="Generate cURL Code" style="font-size: 11px; display: none;">Code</button>
+
       <!-- Theme Switcher -->
       <button id="btn-toggle-theme" class="btn-icon" title="Toggle Dark/Light Mode">☀️</button>
     </div>
@@ -56,6 +78,8 @@ $apiBaseUrl = $baseUrl . '/api';
         <div class="sidebar-toolbar" style="padding: 0 0 8px 0;">
           <input type="text" class="search-input" placeholder="Search requests..." id="search-collections">
           <button class="btn btn-sm btn-primary" id="btn-new-collection" style="margin-left: 6px; white-space: nowrap;">+ New</button>
+          <button class="btn btn-sm" id="btn-export-collection" title="Export collection as JSON" style="margin-left: 4px;">↑ Export</button>
+          <label class="btn btn-sm" title="Import collection from JSON" style="margin-left: 4px; cursor: pointer;">↓ Import<input type="file" id="import-collection-file" accept=".json" style="display: none;"></label>
         </div>
         <div id="collections-list">
           <!-- Dynamic Collections Tree -->
@@ -289,6 +313,124 @@ $apiBaseUrl = $baseUrl . '/api';
 
   </div>
 
+  <!-- Modal: Authentication -->
+  <div class="modal-overlay" id="modal-auth" style="z-index: 10000;">
+    <div class="modal-card" style="width: 400px; max-width: 95vw;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--text-primary);">Welcome to DevDock</h3>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">API Development &amp; Testing Platform</p>
+        </div>
+      </div>
+
+      <!-- Auth Tabs -->
+      <div style="display: flex; border-bottom: 1px solid var(--border-color); margin: 0 0 20px 0;">
+        <button class="auth-tab-btn active" data-auth-tab="login" style="flex: 1; padding: 10px; background: none; border: none; border-bottom: 2px solid var(--accent-color); color: var(--text-primary); font-size: 13px; font-weight: 600; cursor: pointer;">Sign In</button>
+        <button class="auth-tab-btn" data-auth-tab="register" style="flex: 1; padding: 10px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 13px; cursor: pointer;">Create Account</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 0;">
+        <!-- Login Form -->
+        <div id="auth-login-form">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="login-email" class="form-control" placeholder="developer@example.com" autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="login-password" class="form-control" placeholder="Your password" autocomplete="current-password">
+          </div>
+          <div id="auth-login-error" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 12px; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px;"></div>
+          <button class="btn btn-primary" id="btn-login" style="width: 100%;">Sign In</button>
+        </div>
+
+        <!-- Register Form -->
+        <div id="auth-register-form" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="reg-name" class="form-control" placeholder="John Doe" autocomplete="name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="reg-email" class="form-control" placeholder="developer@example.com" autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="reg-password" class="form-control" placeholder="Min. 6 characters" autocomplete="new-password">
+          </div>
+          <div id="auth-register-error" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 12px; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px;"></div>
+          <button class="btn btn-primary" id="btn-register" style="width: 100%;">Create Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Environment Manager -->
+  <div class="modal-overlay" id="modal-env-manager">
+    <div class="modal-card" style="width: 700px; max-width: 95vw; height: 500px; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">Environment Manager</h3>
+        <button class="btn-icon btn-sm" onclick="App.closeModal('modal-env-manager')">×</button>
+      </div>
+      <div style="display: flex; flex: 1; overflow: hidden; gap: 0;">
+        <!-- Left: environment list -->
+        <div style="width: 200px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 12px;">
+          <div id="env-manager-list" style="flex: 1; overflow-y: auto;"></div>
+          <button class="btn btn-sm btn-primary" id="btn-env-new" style="margin-top: 8px; width: 100%;">+ New Environment</button>
+        </div>
+        <!-- Right: variable editor -->
+        <div style="flex: 1; display: flex; flex-direction: column; padding: 12px; overflow: hidden;">
+          <div id="env-editor-placeholder" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 13px;">
+            Select or create an environment
+          </div>
+          <div id="env-editor-panel" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+              <input type="text" id="env-editor-name" class="form-control" style="flex: 1;" placeholder="Environment name">
+              <button class="btn btn-sm" id="btn-env-delete-current" style="color: #ef4444; border-color: #ef4444;">Delete</button>
+            </div>
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px;">VARIABLES</div>
+            <div style="overflow-y: auto; flex: 1;">
+              <table class="kv-table" style="width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width: 30px;"></th>
+                    <th>Variable Name</th>
+                    <th>Value</th>
+                    <th style="width: 60px;">Secret</th>
+                    <th style="width: 30px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="env-vars-table-body"></tbody>
+              </table>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-sm" id="btn-env-add-var">+ Add Variable</button>
+              <button class="btn btn-sm btn-primary" id="btn-env-save" style="margin-left: auto;">Save Environment</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: cURL Code Generator -->
+  <div class="modal-overlay" id="modal-curl">
+    <div class="modal-card" style="width: 600px; max-width: 95vw;">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">cURL Code Generator</h3>
+        <button class="btn-icon btn-sm" onclick="App.closeModal('modal-curl')">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Copy this command and run it in your terminal to replicate this request:</p>
+        <pre id="curl-output" class="response-viewer" style="min-height: 120px; font-size: 12px; white-space: pre-wrap; word-break: break-all;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="App.closeModal('modal-curl')">Close</button>
+        <button class="btn btn-primary" id="btn-copy-curl">Copy</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Create Collection -->
   <div class="modal-overlay" id="modal-collection">
     <div class="modal-card">
@@ -340,3 +482,4 @@ $apiBaseUrl = $baseUrl . '/api';
   <script src="<?= htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8') ?>/assets/js/app.js"></script>
 </body>
 </html>
+

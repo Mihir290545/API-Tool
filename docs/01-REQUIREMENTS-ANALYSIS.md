@@ -2,8 +2,7 @@
 
 **Project:** DevDock (API Development & Testing Platform)  
 **Author:** Mihir Raval  
-**Track:** Software Development / PHP Developer  
-**Institution / Program:** Yuva Intern  
+**License:** MIT Open Source  
 
 ---
 

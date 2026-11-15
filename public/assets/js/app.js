@@ -1,6 +1,6 @@
 /**
  * DevDock — Core Application Client (Vanilla JavaScript)
- * Handles state management, UI events, API interactions, and testing.
+ * Handles state management, UI events, API interactions, testing, and auth.
  */
 
 const App = {
@@ -11,10 +11,12 @@ const App = {
     theme: localStorage.getItem('devdock_theme') || 'dark',
     environments: [],
     selectedEnvId: '',
+    currentEditingEnvId: null,
     collections: [],
     activeRequestId: null,
     history: [],
     csrfToken: '',
+    user: null,
     isLoading: false,
     rawResponse: null,
   },
@@ -25,7 +27,7 @@ const App = {
     this.applyTheme(this.state.theme);
     this.bindEvents();
     this.initDefaultRows();
-    this.loadInitialData();
+    this.initAuth();
   },
 
   applyTheme(theme) {
@@ -36,6 +38,22 @@ const App = {
     if (themeBtn) {
       themeBtn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
     }
+  },
+
+  async fetchApi(endpoint, options = {}) {
+    options.headers = options.headers || {};
+    if (this.state.csrfToken) {
+      options.headers['X-CSRF-Token'] = this.state.csrfToken;
+    }
+    const res = await fetch(`${this.apiBase}${endpoint}`, options);
+    if (res.status === 401 && !['/auth/login', '/auth/register', '/auth/me'].includes(endpoint)) {
+      this.state.user = null;
+      document.getElementById('user-menu-wrapper').style.display = 'none';
+      document.getElementById('btn-curl-gen').style.display = 'none';
+      this.openModal('modal-auth');
+      throw new Error('Authentication required. Please sign in.');
+    }
+    return res;
   },
 
   bindEvents() {
@@ -52,7 +70,6 @@ const App = {
         const target = e.currentTarget.dataset.tab;
         this.state.sidebarTab = target;
         document.getElementById('view-collections').style.display = target === 'collections' ? 'block' : 'none';
-        document.getElementById('view-environments').style.display = target === 'environments' ? 'block' : 'none';
         document.getElementById('view-history').style.display = target === 'history' ? 'block' : 'none';
       });
     });
@@ -141,6 +158,207 @@ const App = {
 
     // Clear History
     document.getElementById('btn-clear-history').addEventListener('click', () => this.clearHistory());
+
+    // -------------------------------------------------------------------------
+    // Auth Modal & User Dropdown Events
+    // -------------------------------------------------------------------------
+    document.querySelectorAll('.auth-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.auth-tab-btn').forEach(b => {
+          b.classList.remove('active');
+          b.style.borderBottom = '2px solid transparent';
+          b.style.color = 'var(--text-muted)';
+        });
+        e.currentTarget.classList.add('active');
+        e.currentTarget.style.borderBottom = '2px solid var(--accent-color)';
+        e.currentTarget.style.color = 'var(--text-primary)';
+        const tab = e.currentTarget.dataset.authTab;
+        document.getElementById('auth-login-form').style.display = tab === 'login' ? 'block' : 'none';
+        document.getElementById('auth-register-form').style.display = tab === 'register' ? 'block' : 'none';
+      });
+    });
+
+    document.getElementById('btn-login').addEventListener('click', () => this.handleLogin());
+    document.getElementById('btn-register').addEventListener('click', () => this.handleRegister());
+
+    const userTrigger = document.getElementById('user-menu-trigger');
+    if (userTrigger) {
+      userTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const drop = document.getElementById('user-dropdown');
+        drop.style.display = drop.style.display === 'block' ? 'none' : 'block';
+      });
+    }
+
+    document.addEventListener('click', () => {
+      const drop = document.getElementById('user-dropdown');
+      if (drop) drop.style.display = 'none';
+    });
+
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => this.handleLogout());
+    }
+
+    // -------------------------------------------------------------------------
+    // Environment Manager Events
+    // -------------------------------------------------------------------------
+    const manageEnvsBtn = document.getElementById('btn-manage-envs');
+    if (manageEnvsBtn) {
+      manageEnvsBtn.addEventListener('click', () => this.openEnvManagerModal());
+    }
+    const envNewBtn = document.getElementById('btn-env-new');
+    if (envNewBtn) {
+      envNewBtn.addEventListener('click', () => this.createNewEnvironment());
+    }
+    const envAddVarBtn = document.getElementById('btn-env-add-var');
+    if (envAddVarBtn) {
+      envAddVarBtn.addEventListener('click', () => this.addEnvVarRow('', '', false));
+    }
+    const envSaveBtn = document.getElementById('btn-env-save');
+    if (envSaveBtn) {
+      envSaveBtn.addEventListener('click', () => this.saveCurrentEnvironment());
+    }
+    const envDeleteBtn = document.getElementById('btn-env-delete-current');
+    if (envDeleteBtn) {
+      envDeleteBtn.addEventListener('click', () => this.deleteCurrentEnvironment());
+    }
+
+    // -------------------------------------------------------------------------
+    // cURL Code Generator Events
+    // -------------------------------------------------------------------------
+    const curlGenBtn = document.getElementById('btn-curl-gen');
+    if (curlGenBtn) {
+      curlGenBtn.addEventListener('click', () => this.openCurlModal());
+    }
+    const copyCurlBtn = document.getElementById('btn-copy-curl');
+    if (copyCurlBtn) {
+      copyCurlBtn.addEventListener('click', () => {
+        const text = document.getElementById('curl-output').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          copyCurlBtn.innerText = 'Copied!';
+          setTimeout(() => copyCurlBtn.innerText = 'Copy', 1500);
+        });
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Export & Import Events
+    // -------------------------------------------------------------------------
+    const exportBtn = document.getElementById('btn-export-collection');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this.exportCurrentCollection());
+    }
+    const importInput = document.getElementById('import-collection-file');
+    if (importInput) {
+      importInput.addEventListener('change', (e) => this.handleCollectionImport(e));
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Authentication
+  // ---------------------------------------------------------------------------
+  async initAuth() {
+    try {
+      const res = await fetch(`${this.apiBase}/auth/me`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data.user) {
+          this.setAuthenticatedUser(json.data.user, json.data.csrf_token);
+          await this.loadInitialData();
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('Session check completed:', e);
+    }
+    this.openModal('modal-auth');
+  },
+
+  setAuthenticatedUser(user, csrfToken) {
+    this.state.user = user;
+    if (csrfToken) {
+      this.state.csrfToken = csrfToken;
+    }
+    const nameElem = document.getElementById('user-menu-name');
+    const emailElem = document.getElementById('user-dropdown-email');
+    if (nameElem) nameElem.innerText = user.name || user.email;
+    if (emailElem) emailElem.innerText = user.email;
+    document.getElementById('user-menu-wrapper').style.display = 'block';
+    document.getElementById('btn-curl-gen').style.display = 'inline-block';
+    this.closeModal('modal-auth');
+  },
+
+  async handleLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errBox = document.getElementById('auth-login-error');
+    errBox.style.display = 'none';
+
+    if (!email || !password) {
+      errBox.innerText = 'Email and password are required.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${this.apiBase}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        throw new Error(json.message || 'Login failed.');
+      }
+      this.setAuthenticatedUser(json.data.user, json.data.csrf_token);
+      await this.loadInitialData();
+    } catch (err) {
+      errBox.innerText = err.message;
+      errBox.style.display = 'block';
+    }
+  },
+
+  async handleRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const errBox = document.getElementById('auth-register-error');
+    errBox.style.display = 'none';
+
+    if (!name || !email || !password) {
+      errBox.innerText = 'All fields are required.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${this.apiBase}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        throw new Error(json.message || 'Registration failed.');
+      }
+      this.setAuthenticatedUser(json.data.user, json.data.csrf_token);
+      await this.loadInitialData();
+    } catch (err) {
+      errBox.innerText = err.message;
+      errBox.style.display = 'block';
+    }
+  },
+
+  async handleLogout() {
+    try {
+      await this.fetchApi('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      // ignore
+    }
+    this.state.user = null;
+    this.state.csrfToken = '';
+    window.location.reload();
   },
 
   async loadInitialData() {
@@ -160,6 +378,7 @@ const App = {
 
   addKvRow(tableBodyId, defaultKey = '', defaultVal = '') {
     const tbody = document.getElementById(tableBodyId);
+    if (!tbody) return;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="width: 30px; text-align: center;">
@@ -176,6 +395,7 @@ const App = {
 
   addTestRow(defaultType = 'status_code_is', defaultExpected = '') {
     const tbody = document.getElementById('tests-table-body');
+    if (!tbody) return;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="width: 30px; text-align: center;">
@@ -285,7 +505,7 @@ const App = {
     sendBtn.innerText = 'Sending...';
 
     try {
-      const res = await fetch(`${this.apiBase}/request/send`, {
+      const res = await this.fetchApi('/request/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -297,7 +517,7 @@ const App = {
       }
 
       this.renderResponse(json.data.response, json.data.test_results);
-      this.fetchHistory(); // Refresh history sidebar
+      this.fetchHistory();
     } catch (err) {
       alert('Error executing request: ' + err.message);
     } finally {
@@ -307,7 +527,6 @@ const App = {
   },
 
   renderResponse(res, testResults) {
-    // 1. Status Bar
     const statusElem = document.getElementById('res-status');
     statusElem.innerText = `${res.status_code} ${res.status_text}`;
     statusElem.className = 'stat-value';
@@ -320,7 +539,7 @@ const App = {
     document.getElementById('res-time').innerText = `${res.response_time_ms} ms`;
     document.getElementById('res-size').innerText = `${res.response_size_bytes} B`;
 
-    // 2. Response Body
+    // Response Body
     this.state.rawResponse = res.response_body;
     const bodyViewer = document.getElementById('response-body-viewer');
     try {
@@ -330,7 +549,7 @@ const App = {
       bodyViewer.innerText = res.response_body || '(Empty Response Body)';
     }
 
-    // 3. Response Headers
+    // Response Headers
     const headersTable = document.getElementById('response-headers-table');
     headersTable.innerHTML = '';
     for (const [key, val] of Object.entries(res.response_headers || {})) {
@@ -342,7 +561,7 @@ const App = {
       headersTable.appendChild(tr);
     }
 
-    // 4. Test Results
+    // Test Results
     const testsContainer = document.getElementById('test-results-list');
     testsContainer.innerHTML = '';
     const badgeCount = document.getElementById('test-results-count');
@@ -379,7 +598,7 @@ const App = {
   // ---------------------------------------------------------------------------
   async fetchCollections() {
     try {
-      const res = await fetch(`${this.apiBase}/collections`);
+      const res = await this.fetchApi('/collections');
       const json = await res.json();
       if (json.success) {
         this.state.collections = json.data;
@@ -395,7 +614,7 @@ const App = {
     list.innerHTML = '';
 
     if (this.state.collections.length === 0) {
-      list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:20px;">No collections yet. Click "+ Collection" to start.</div>';
+      list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:20px;">No collections yet. Click "+ New" to start.</div>';
       return;
     }
 
@@ -409,7 +628,7 @@ const App = {
             <span>${col.name}</span>
             <span style="font-size:10px; color:var(--text-muted);">(${col.requests ? col.requests.length : 0})</span>
           </div>
-          <button class="btn-icon btn-sm" onclick="event.stopPropagation(); App.deleteCollection(${col.id})">×</button>
+          <button class="btn-icon btn-sm" title="Delete Collection" onclick="event.stopPropagation(); App.deleteCollection(${col.id})">×</button>
         </div>
         <div class="collection-requests">
           ${(col.requests || []).map(r => `
@@ -426,7 +645,7 @@ const App = {
 
   async loadSavedRequest(id) {
     try {
-      const res = await fetch(`${this.apiBase}/requests/${id}`);
+      const res = await this.fetchApi(`/requests/${id}`);
       const json = await res.json();
       if (!json.success) return;
 
@@ -469,6 +688,23 @@ const App = {
       document.getElementById('body-editor-container').style.display = req.body_type === 'none' ? 'none' : 'block';
       document.getElementById('req-body-editor').value = req.body_content || '';
 
+      // Populate Auth
+      const authTypeSelect = document.getElementById('auth-type-select');
+      authTypeSelect.value = req.auth_type || 'none';
+      authTypeSelect.dispatchEvent(new Event('change'));
+
+      const authConf = req.auth_config || {};
+      if (req.auth_type === 'bearer') {
+        document.getElementById('auth-bearer-token').value = authConf.token || '';
+      } else if (req.auth_type === 'basic') {
+        document.getElementById('auth-basic-user').value = authConf.username || '';
+        document.getElementById('auth-basic-pass').value = authConf.password || '';
+      } else if (req.auth_type === 'apikey') {
+        document.getElementById('auth-apikey-key').value = authConf.key || '';
+        document.getElementById('auth-apikey-val').value = authConf.value || '';
+        document.getElementById('auth-apikey-addto').value = authConf.addTo || 'header';
+      }
+
       this.renderCollections();
     } catch (err) {
       console.error(err);
@@ -481,7 +717,7 @@ const App = {
     if (!name) return;
 
     try {
-      const res = await fetch(`${this.apiBase}/collections`, {
+      const res = await this.fetchApi('/collections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description: desc }),
@@ -501,7 +737,7 @@ const App = {
   async deleteCollection(id) {
     if (!confirm('Are you sure you want to delete this collection and its saved requests?')) return;
     try {
-      await fetch(`${this.apiBase}/collections/${id}`, { method: 'DELETE' });
+      await this.fetchApi(`/collections/${id}`, { method: 'DELETE' });
       this.fetchCollections();
     } catch (err) {
       alert(err.message);
@@ -510,6 +746,11 @@ const App = {
 
   openSaveRequestModal() {
     const colSelect = document.getElementById('save-req-collection');
+    if (this.state.collections.length === 0) {
+      alert('Please create a collection first before saving requests.');
+      this.openModal('modal-collection');
+      return;
+    }
     colSelect.innerHTML = this.state.collections.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     this.openModal('modal-save-request');
   },
@@ -520,6 +761,19 @@ const App = {
     if (!name) {
       alert('Please enter a request name.');
       return;
+    }
+
+    const authType = document.getElementById('auth-type-select').value;
+    const authConfig = {};
+    if (authType === 'bearer') {
+      authConfig.token = document.getElementById('auth-bearer-token').value.trim();
+    } else if (authType === 'basic') {
+      authConfig.username = document.getElementById('auth-basic-user').value;
+      authConfig.password = document.getElementById('auth-basic-pass').value;
+    } else if (authType === 'apikey') {
+      authConfig.key = document.getElementById('auth-apikey-key').value.trim();
+      authConfig.value = document.getElementById('auth-apikey-val').value.trim();
+      authConfig.addTo = document.getElementById('auth-apikey-addto').value;
     }
 
     const payload = {
@@ -533,11 +787,12 @@ const App = {
       tests: this.getTestsData(),
       body_type: document.querySelector('input[name="body-type"]:checked').value,
       body_content: document.getElementById('req-body-editor').value,
-      auth_type: document.getElementById('auth-type-select').value,
+      auth_type: authType,
+      auth_config: authConfig,
     };
 
     try {
-      const res = await fetch(`${this.apiBase}/requests`, {
+      const res = await this.fetchApi('/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -559,7 +814,7 @@ const App = {
   // ---------------------------------------------------------------------------
   async fetchEnvironments() {
     try {
-      const res = await fetch(`${this.apiBase}/environments`);
+      const res = await this.fetchApi('/environments');
       const json = await res.json();
       if (json.success) {
         this.state.environments = json.data;
@@ -576,12 +831,278 @@ const App = {
     }
   },
 
+  openEnvManagerModal() {
+    this.openModal('modal-env-manager');
+    this.renderEnvManagerList();
+    if (this.state.environments.length > 0) {
+      this.selectEnvForEditing(this.state.environments[0].id);
+    } else {
+      document.getElementById('env-editor-placeholder').style.display = 'flex';
+      document.getElementById('env-editor-panel').style.display = 'none';
+    }
+  },
+
+  renderEnvManagerList() {
+    const list = document.getElementById('env-manager-list');
+    list.innerHTML = '';
+    this.state.environments.forEach(env => {
+      const item = document.createElement('div');
+      item.className = 'request-item';
+      if (this.state.currentEditingEnvId === env.id) item.classList.add('active');
+      item.style.padding = '8px';
+      item.style.cursor = 'pointer';
+      item.style.marginBottom = '4px';
+      item.innerHTML = `
+        <span style="font-weight: 500;">🌐 ${env.name}</span>
+        <span style="font-size: 10px; color: var(--text-muted); margin-left: auto;">${env.variables ? env.variables.length : 0} vars</span>
+      `;
+      item.onclick = () => this.selectEnvForEditing(env.id);
+      list.appendChild(item);
+    });
+  },
+
+  async selectEnvForEditing(envId) {
+    this.state.currentEditingEnvId = envId;
+    this.renderEnvManagerList();
+
+    try {
+      const res = await this.fetchApi(`/environments/${envId}`);
+      const json = await res.json();
+      if (!json.success) return;
+
+      const env = json.data;
+      document.getElementById('env-editor-placeholder').style.display = 'none';
+      document.getElementById('env-editor-panel').style.display = 'flex';
+      document.getElementById('env-editor-name').value = env.name;
+
+      const tbody = document.getElementById('env-vars-table-body');
+      tbody.innerHTML = '';
+      if (env.variables && env.variables.length > 0) {
+        env.variables.forEach(v => {
+          this.addEnvVarRow(v.var_key, v.var_value, (v.is_secret == 1 || v.is_secret === true));
+        });
+      } else {
+        this.addEnvVarRow('', '', false);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  addEnvVarRow(key = '', val = '', isSecret = false) {
+    const tbody = document.getElementById('env-vars-table-body');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="width: 30px; text-align: center;">
+        <input type="checkbox" class="var-enable" checked>
+      </td>
+      <td><input type="text" class="kv-input var-key" placeholder="variable_name" value="${key}"></td>
+      <td><input type="${isSecret ? 'password' : 'text'}" class="kv-input var-val" placeholder="value" value="${val}"></td>
+      <td style="width: 60px; text-align: center;">
+        <input type="checkbox" class="var-secret" ${isSecret ? 'checked' : ''} onchange="this.closest('tr').querySelector('.var-val').type = this.checked ? 'password' : 'text'">
+      </td>
+      <td style="width: 30px; text-align: center;">
+        <button type="button" class="btn-icon btn-sm" onclick="this.closest('tr').remove()">×</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  },
+
+  async createNewEnvironment() {
+    const name = prompt('Enter new environment name (e.g. Staging, Production):', 'Staging');
+    if (!name || !name.trim()) return;
+
+    try {
+      const res = await this.fetchApi('/environments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), variables: [] }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await this.fetchEnvironments();
+        this.selectEnvForEditing(json.data.id);
+      }
+    } catch (e) {
+      alert(e.message);
+    }
+  },
+
+  async saveCurrentEnvironment() {
+    if (!this.state.currentEditingEnvId) return;
+
+    const name = document.getElementById('env-editor-name').value.trim();
+    if (!name) {
+      alert('Environment name cannot be empty.');
+      return;
+    }
+
+    const rows = document.querySelectorAll('#env-vars-table-body tr');
+    const variables = [];
+    rows.forEach(r => {
+      const key = r.querySelector('.var-key').value.trim();
+      const val = r.querySelector('.var-val').value;
+      const enabled = r.querySelector('.var-enable').checked;
+      const secret = r.querySelector('.var-secret').checked;
+      if (key) {
+        variables.push({
+          var_key: key,
+          var_value: val,
+          is_enabled: enabled,
+          is_secret: secret,
+        });
+      }
+    });
+
+    try {
+      const res = await this.fetchApi(`/environments/${this.state.currentEditingEnvId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, variables }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert('Environment saved!');
+        await this.fetchEnvironments();
+        this.renderEnvManagerList();
+      }
+    } catch (e) {
+      alert('Error saving environment: ' + e.message);
+    }
+  },
+
+  async deleteCurrentEnvironment() {
+    if (!this.state.currentEditingEnvId) return;
+    if (!confirm('Are you sure you want to delete this environment?')) return;
+
+    try {
+      await this.fetchApi(`/environments/${this.state.currentEditingEnvId}`, { method: 'DELETE' });
+      this.state.currentEditingEnvId = null;
+      await this.fetchEnvironments();
+      this.openEnvManagerModal();
+    } catch (e) {
+      alert(e.message);
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // cURL Code Generator
+  // ---------------------------------------------------------------------------
+  async openCurlModal() {
+    const curlOutput = document.getElementById('curl-output');
+    curlOutput.innerText = 'Generating cURL command...';
+    this.openModal('modal-curl');
+
+    if (this.state.activeRequestId) {
+      try {
+        const res = await this.fetchApi(`/requests/${this.state.activeRequestId}/curl`);
+        const json = await res.json();
+        if (json.success && json.data.curl) {
+          curlOutput.innerText = json.data.curl;
+          return;
+        }
+      } catch (e) {
+        console.warn('Backend curl generation fallback to client-side:', e);
+      }
+    }
+
+    // Client-side fallback generator from active form
+    const method = document.getElementById('req-method').value;
+    const url = document.getElementById('req-url').value.trim();
+    const headers = this.getKvData('headers-table-body');
+    const bodyType = document.querySelector('input[name="body-type"]:checked').value;
+    const body = bodyType === 'none' ? null : document.getElementById('req-body-editor').value;
+
+    const parts = [`curl -X ${method}`];
+
+    // Auth
+    const authType = document.getElementById('auth-type-select').value;
+    if (authType === 'bearer') {
+      const token = document.getElementById('auth-bearer-token').value.trim();
+      if (token) parts.push(`-H "Authorization: Bearer ${token}"`);
+    } else if (authType === 'basic') {
+      const u = document.getElementById('auth-basic-user').value;
+      const p = document.getElementById('auth-basic-pass').value;
+      if (u) parts.push(`-u "${u}:${p}"`);
+    } else if (authType === 'apikey') {
+      const k = document.getElementById('auth-apikey-key').value.trim();
+      const v = document.getElementById('auth-apikey-val').value.trim();
+      const addTo = document.getElementById('auth-apikey-addto').value;
+      if (k && addTo === 'header') parts.push(`-H "${k}: ${v}"`);
+    }
+
+    headers.forEach(h => {
+      if (h.is_enabled && h.key) {
+        parts.push(`-H "${h.key}: ${h.value}"`);
+      }
+    });
+
+    if (body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      parts.push(`-H "Content-Type: application/json"`);
+      parts.push(`-d '${body.replace(/'/g, "'\\''")}'`);
+    }
+
+    parts.push(`"${url}"`);
+    curlOutput.innerText = parts.join(' \\\n  ');
+  },
+
+  // ---------------------------------------------------------------------------
+  // Collection Export & Import
+  // ---------------------------------------------------------------------------
+  exportCurrentCollection() {
+    if (this.state.collections.length === 0) {
+      alert('No collections available to export.');
+      return;
+    }
+
+    let colId = this.state.collections[0].id;
+    if (this.state.collections.length > 1) {
+      const names = this.state.collections.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+      const choice = prompt(`Select collection to export:\n${names}\n\nEnter number:`, '1');
+      if (!choice) return;
+      const index = parseInt(choice, 10) - 1;
+      if (this.state.collections[index]) {
+        colId = this.state.collections[index].id;
+      }
+    }
+
+    window.open(`${this.apiBase}/collections/${colId}/export`, '_blank');
+  },
+
+  async handleCollectionImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        const res = await this.fetchApi('/collections/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(json),
+        });
+        const resData = await res.json();
+        if (!resData.success) {
+          throw new Error(resData.message || 'Import failed.');
+        }
+        alert(`Collection imported successfully! (${resData.data.imported_requests} requests imported)`);
+        await this.fetchCollections();
+      } catch (err) {
+        alert('Error importing collection: ' + err.message);
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  },
+
   // ---------------------------------------------------------------------------
   // History
   // ---------------------------------------------------------------------------
   async fetchHistory() {
     try {
-      const res = await fetch(`${this.apiBase}/history`);
+      const res = await this.fetchApi('/history');
       const json = await res.json();
       if (json.success) {
         this.state.history = json.data;
@@ -629,7 +1150,7 @@ const App = {
   async clearHistory() {
     if (!confirm('Clear all request history?')) return;
     try {
-      await fetch(`${this.apiBase}/history`, { method: 'DELETE' });
+      await this.fetchApi('/history', { method: 'DELETE' });
       this.fetchHistory();
     } catch (e) {
       alert(e.message);
@@ -640,11 +1161,13 @@ const App = {
   // Modal Helpers
   // ---------------------------------------------------------------------------
   openModal(id) {
-    document.getElementById(id).classList.add('active');
+    const m = document.getElementById(id);
+    if (m) m.classList.add('active');
   },
 
   closeModal(id) {
-    document.getElementById(id).classList.remove('active');
+    const m = document.getElementById(id);
+    if (m) m.classList.remove('active');
   },
 };
 

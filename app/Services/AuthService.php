@@ -68,6 +68,7 @@ class AuthService
             'email' => $cleanEmail,
         ];
 
+        session_regenerate_id(true);
         Session::setAuthUser($user);
 
         return $user;
@@ -94,6 +95,7 @@ class AuthService
             'email' => $user['email'],
         ];
 
+        session_regenerate_id(true);
         Session::setAuthUser($userData);
 
         return $userData;

@@ -5,23 +5,23 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Zero-Cost](https://img.shields.io/badge/Budget-%E2%82%B90%20(Free%20%26%20Open%20Source)-success.svg)](#free-technology-policy)
 
-**DevDock** is a web-based, professional API development, testing, and lifecycle management platform designed as an internship portfolio project for **Yuva Intern**. Built with native PHP 8.x, MySQL (PDO), and vanilla JavaScript, DevDock offers a developer experience inspired by tools like Postman and Insomnia—with **₹0 budget and zero paid dependencies**.
+**DevDock** is a modern, lightweight, web-based API development, testing, and lifecycle management platform. Built with native PHP 8.x, MySQL (PDO), and vanilla JavaScript, DevDock offers a fast, zero-dependency alternative to desktop API clients like Postman and Insomnia—running seamlessly on any standard LAMP stack or free shared web hosting (such as InfinityFree).
 
 ---
 
 ## 🌟 Core Features
 
-### 1. API Request Builder
+### 1. API Request Composer
 * **All Major HTTP Verbs**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`.
-* **Dynamic Parameter & Header Builders**: Key-value tables with instant toggle and deletion.
+* **Dynamic Parameter & Header Builders**: Interactive key-value tables with instant toggle and deletion.
 * **JSON & Raw Body Editor**: Built-in JSON syntax validator and indentation beautifier.
-* **Asynchronous Fetching**: Non-blocking client-side execution with animated status and progress indicators.
+* **cURL Code Generator**: Export any configured request into an executable cURL snippet ready for terminal use.
 
 ### 2. API Response Analyzer
 * **Metrics Dashboard**: Exact HTTP status codes (with semantic color tokens), execution latency (ms), and download payload size (bytes).
 * **Syntax Highlighting & Formatting**: Auto-detected JSON pretty printing with raw text toggle.
 * **Response Headers Table**: Clean, searchable inspection of all returned response headers.
-* **One-Click Copy**: Instant clipboard copy with animated visual confirmation.
+* **One-Click Copy**: Instant clipboard copy with visual confirmation.
 
 ### 3. Authentication Management
 * **Flexible Authentication Modes**:
@@ -31,15 +31,17 @@
   * **API Key** (Injectable via custom Header or URL Query Parameter)
 * **Secret Protection**: Password input masking in the browser.
 
-### 4. Collection Management
+### 4. Collection Management & Portability
 * Organize API endpoints into logical collections.
 * Save, update, rename, and delete requests.
-* Reopen any saved request into the active workspace with a single click.
+* **JSON Import & Export**: One-click export and import of entire request collections.
+* User isolation: Users only see and modify their own collections and requests.
 
 ### 5. Multi-Profile Environment Variables
-* Configure environments (e.g. *Development*, *Staging*, *Production*).
+* Configure custom environments (e.g., *Development*, *Staging*, *Production*).
 * Define variables (e.g., `base_url`, `api_token`).
-* Dynamic double-curly substitution (`{{base_url}}/users`, `{{token}}`) across URLs, headers, parameters, and bodies.
+* Dynamic double-curly substitution (`{{base_url}}/users`, `{{api_token}}`) across URLs, headers, parameters, and bodies.
+* Sensitive value masking toggle in the environment manager interface.
 
 ### 6. Automated API Assertion Engine
 * Validate HTTP status code (e.g., Status code is `200`).
@@ -55,120 +57,153 @@
 * History cleanup and individual execution deletion.
 
 ### 8. Enterprise-Grade Security
-* **SSRF Defense**: Outbound URL validator blocking local loopback (`127.0.0.1`), link-local metadata endpoints (`169.254.169.254`), and private RFC1918 subnets.
+* **User Authentication**: Secure registration, login, session persistence, and password hashing (`password_hash` with `PASSWORD_DEFAULT`).
+* **Session Security**: Session ID regeneration (`session_regenerate_id(true)`) upon authentication.
+* **CSRF Protection**: Synchronizer token pattern with cryptographically secure tokens (`X-CSRF-Token`) validated on all state-changing endpoints.
+* **SSRF Defense**: Outbound URL validator blocking local loopback (`127.0.0.1`), link-local metadata endpoints (`169.254.169.254`), and private RFC1918 subnets, with configurable `ALLOW_LOCAL_REQUESTS` flag for local development.
 * **SQL Injection Prevention**: 100% PDO prepared statements.
 * **XSS Defense**: Strict UTF-8 escaping and input sanitization.
-* **Tenant Isolation**: Multi-user relational isolation scoping all queries to the authenticated user ID.
 
 ---
 
-## 🛠 Technology Stack
+## 🛠️ Free Technology Policy
 
-* **Backend Primary Language**: PHP 8.2 (Native, Modular, Zero Composer Bloat)
-* **Database**: MySQL Community Edition / MariaDB 10.4
-* **Database Driver**: PHP Data Objects (PDO) with strict error handling
-* **HTTP Client**: PHP cURL Extension
-* **Frontend**: HTML5, Modern CSS3 (Custom Properties & Themes), Vanilla JavaScript (ES6+ & Fetch API)
-* **Local Web Server**: Apache (XAMPP for Windows)
+DevDock was built adhering strictly to a **₹0 budget and zero paid dependencies** standard:
+
+| Layer | Technology | Cost |
+| :--- | :--- | :--- |
+| **Backend** | Native PHP 8.x + cURL Engine | Free / Open-Source |
+| **Database** | MySQL 5.7+ / MariaDB 10.4+ (PDO) | Free / Open-Source |
+| **Frontend** | Semantic HTML5, CSS3 Variables, Vanilla ES6+ | Free / Zero Frameworks |
+| **Local Dev** | XAMPP / Apache Virtual Host | Free |
+| **Live Hosting** | InfinityFree Shared Hosting | Free Forever |
+| **Version Control** | Git & GitHub | Free |
 
 ---
 
-## 📁 Project Architecture
+## 📂 Project Architecture
 
 ```
-API-Tool/
+devdock/
 ├── app/
 │   ├── Controllers/
 │   │   ├── ApiController.php         # Request execution, collections, history, mock
-│   │   └── AuthController.php        # User registration, login, logout
+│   │   └── AuthController.php        # Registration, login, logout, session
 │   ├── Core/
-│   │   ├── Autoloader.php            # PSR-4 native class autoloader
-│   │   ├── Database.php              # PDO singleton with prepared statements
-│   │   ├── Env.php                   # Lightweight .env configuration parser
-│   │   ├── Request.php               # HTTP request normalizer and input extractor
-│   │   ├── Response.php              # Structured JSON and view responder
-│   │   ├── Router.php                # RESTful router with regex parameter matching
-│   │   └── Session.php               # Secure session and CSRF state manager
+│   │   ├── Autoloader.php            # Custom PSR-4 class loader
+│   │   ├── Database.php              # PDO Singleton connection manager
+│   │   ├── Env.php                   # Environment file (.env) parser
+│   │   ├── Request.php               # HTTP request abstraction
+│   │   ├── Response.php              # Standardized JSON response emitter
+│   │   ├── Router.php                # RESTful regex route dispatcher
+│   │   └── Session.php               # Secure session & CSRF management
 │   ├── Helpers/
-│   │   └── Security.php              # XSS sanitization and SSRF outbound validation
+│   │   └── Security.php              # SSRF defense, XSS escaping, email sanitization
 │   ├── Services/
-│   │   ├── AuthService.php           # User authentication and password hashing
-│   │   ├── CollectionService.php     # Collections & saved requests CRUD
-│   │   ├── EnvironmentService.php    # Multi-environment variable substitution
-│   │   ├── HistoryService.php        # Execution history logging and replay
-│   │   ├── HttpClientService.php     # Outbound cURL engine and metrics capture
-│   │   └── TestRunnerService.php     # Automated assertion evaluation engine
+│   │   ├── AuthService.php           # User credentials, hashing, registration
+│   │   ├── CollectionService.php     # Collection & request persistence
+│   │   ├── EnvironmentService.php    # Env variable resolution & substitution
+│   │   ├── HistoryService.php        # Audit logging of sent requests
+│   │   ├── HttpClientService.php     # PHP cURL outbound request engine
+│   │   └── TestRunnerService.php     # Assertion evaluation engine
 │   └── Views/
-│       └── app.php                   # Single Page Application developer interface
+│       └── app.php                   # Single Page Application (SPA) view
 ├── config/
-│   ├── app.php                       # Application parameters and execution limits
-│   └── database.php                  # PDO connection options and credentials
+│   ├── app.php                       # Application configuration
+│   ├── database.php                  # Database connection credentials
+│   └── database.prod.php.example     # Production database credentials template
 ├── database/
-│   ├── schema.sql                    # 10-table normalized relational schema
-│   └── seed.php                      # Default developer account seeder
-├── docs/                             # Internship technical documentation
+│   ├── schema.sql                    # Production DDL for phpMyAdmin import
+│   ├── export_production.sql         # Clean DDL without CREATE DATABASE
+│   └── seed.php                      # CLI database seeder
+├── docs/                             # Comprehensive technical documentation
 │   ├── 01-REQUIREMENTS-ANALYSIS.md
 │   ├── 02-SYSTEM-ARCHITECTURE.md
 │   ├── 03-DATABASE-DESIGN.md
-│   └── 04-INSTALLATION-AND-USER-GUIDE.md
+│   ├── 04-INSTALLATION-AND-USER-GUIDE.md
+│   ├── 05-INFINITYFREE-DEPLOYMENT-GUIDE.md
+│   └── 06-FREE-HOSTING-CHECKLIST.md
 ├── public/
 │   ├── assets/
-│   │   ├── css/style.css             # Developer UI theme stylesheet
-│   │   └── js/app.js                 # Frontend SPA state & event controller
-│   ├── .htaccess                     # Apache clean URL rewrite rules
-│   └── index.php                     # Single Front Controller entry point
+│   │   ├── css/style.css             # Responsive theme styling (Dark/Light)
+│   │   └── js/app.js                 # Frontend application logic & state
+│   ├── .htaccess                     # Apache rewrite rules
+│   └── index.php                     # Front controller
 ├── storage/
-│   ├── logs/                         # Application runtime logs
-│   └── cache/                        # Temporary cached files
-├── .env.example                      # Configuration environment template
-├── .gitignore                        # Git ignore rules protecting secrets
-└── README.md
+│   ├── cache/                        # Cached responses
+│   └── logs/                         # Application error logs
+├── .env.example                      # Sample environment variables
+├── .gitignore                        # Git exclusion rules
+├── .htaccess                         # Root URL routing to public/
+├── DEPLOYMENT.md                     # Deployment guide for InfinityFree
+├── index.php                         # Root proxy to public/index.php
+└── README.md                         # Project documentation
 ```
 
 ---
 
-## 🚀 Quick Start Guide (Windows / XAMPP)
+## 🚀 Quick Start (Local Development)
 
 ### Prerequisites
-* Windows 10/11
-* [XAMPP](https://www.apachefriends.org/) (PHP 8.x and MySQL / MariaDB installed)
+* [XAMPP](https://www.apachefriends.org/) (PHP 8.1+ and MySQL)
+* Git
 
-### 1. Database Setup
-1. Start **Apache** and **MySQL** via XAMPP Control Panel.
-2. Open terminal in the project root and import the schema:
-   ```powershell
-   cmd /c "C:\xampp\mysql\bin\mysql.exe -u root < database\schema.sql"
+### Step-by-Step Installation
+
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Mihir290545/API-Tool.git
+   cd API-Tool
    ```
-3. Seed the default test account:
-   ```powershell
-   C:\xampp\php\php.exe database\seed.php
+
+2. **Configure Local Environment**:
+   ```bash
+   cp .env.example .env
    ```
-   *Default Account:* `developer@devdock.local` | *Password:* `password123`
+   Verify local database settings in `.env`:
+   ```ini
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=devdock_db
+   DB_USERNAME=root
+   DB_PASSWORD=
+   ALLOW_LOCAL_REQUESTS=true
+   ```
 
-### 2. Configure Environment
-Copy `.env.example` to `.env`:
-```ini
-APP_NAME=DevDock
-APP_ENV=development
-APP_DEBUG=true
-APP_URL=http://localhost/api-tool/public
+3. **Import Database Schema**:
+   * Open phpMyAdmin (`http://localhost/phpmyadmin`).
+   * Create database named `devdock_db`.
+   * Import `database/schema.sql`.
+   * *(Optional)* Run seeder:
+     ```bash
+     php database/seed.php
+     ```
 
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=devdock_db
-DB_USERNAME=root
-DB_PASSWORD=
-```
-
-### 3. Launch Application
-Navigate in your browser to:
-[http://localhost/api-tool/public/](http://localhost/api-tool/public/)
+4. **Launch Application**:
+   * Symlink or place folder inside `C:\xampp\htdocs\api-tool`.
+   * Open your browser: `http://localhost/api-tool/`
 
 ---
 
-## 🔒 Free Technology Policy
+## 🌐 Production Deployment (InfinityFree)
 
-This project strictly adheres to the **₹0 Free-to-Use Policy**:
-* Zero paid API keys (OpenAI, Claude, etc.)
-* Zero premium plugins or UI component subscriptions
-* 100% Free Open Source Software (PHP, MySQL Community Edition, Apache, Vanilla JS)
+1. **Database Setup**:
+   * Create a MySQL database in the InfinityFree Control Panel (vPanel).
+   * Note Hostname (e.g., `sql206.infinityfree.com`), Database Name, Username, and Password.
+   * Open phpMyAdmin on InfinityFree and import `database/schema.sql`.
+
+2. **File Upload**:
+   * Upload all repository files into `htdocs/`.
+   * Create `config/database.prod.php` using the template in `config/database.prod.php.example` with your production database credentials.
+
+3. **Security Check**:
+   * Verify that `.env` and `config/database.prod.php` are protected by `.htaccess`.
+   * Ensure `ALLOW_LOCAL_REQUESTS=false` in production.
+
+For detailed instructions, refer to [DEPLOYMENT.md](DEPLOYMENT.md).
+
+---
+
+## 📄 License
+
+This project is open-source and released under the [MIT License](LICENSE).

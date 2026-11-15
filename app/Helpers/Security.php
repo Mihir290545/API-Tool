@@ -51,6 +51,11 @@ class Security
 
         $host = strtolower($parsed['host']);
 
+        // Developer bypass for local testing (never enable in production)
+        if (($_ENV['ALLOW_LOCAL_REQUESTS'] ?? 'false') === 'true') {
+            return ['safe' => true, 'ip' => $host, 'dev_bypass' => true];
+        }
+
         // Check against known dangerous hosts & cloud metadata services
         $blockedHosts = [
             'localhost',

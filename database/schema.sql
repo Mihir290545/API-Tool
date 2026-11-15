@@ -2,10 +2,8 @@
 -- DevDock — Professional API Development & Testing Platform
 -- Normalized MySQL Database Schema
 -- Compatible with MySQL 5.7+ / MariaDB 10.4+ / PHP 8.x PDO
+-- For Shared Hosting (InfinityFree, cPanel): Import directly in phpMyAdmin
 -- ==============================================================================
-
-CREATE DATABASE IF NOT EXISTS `devdock_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `devdock_db`;
 
 -- Drop existing tables in reverse dependency order if needed
 SET FOREIGN_KEY_CHECKS = 0;

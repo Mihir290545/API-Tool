@@ -36,10 +36,25 @@ class ApiController
     {
         $userId = Session::getUserId();
         if (!$userId) {
-            // For developer convenience / single-user local mode, default to user 1 if logged in or seeded
-            return 1;
+            Response::error('Authentication required. Please sign in.', 401);
+            exit;
         }
         return $userId;
+    }
+
+    private function validateCsrf(): void
+    {
+        // Read token from header first, then from body
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+        if (!$token) {
+            $token = Session::getCsrfToken(); // allow body fallback handled in JS
+        }
+        // Actually validate the incoming token
+        $incoming = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+        if (!Session::validateCsrfToken($incoming)) {
+            Response::error('Invalid or missing CSRF token.', 403);
+            exit;
+        }
     }
 
     /**
@@ -47,6 +62,7 @@ class ApiController
      */
     public function sendRequest(Request $request): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
 
         $method = strtoupper(trim($request->getBody('method', 'GET')));
@@ -174,6 +190,7 @@ class ApiController
 
     public function createCollection(Request $request): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $name = (string)$request->getBody('name', '');
         $description = (string)$request->getBody('description', '');
@@ -188,6 +205,7 @@ class ApiController
 
     public function updateCollection(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $colId = (int)($params['id'] ?? 0);
         $name = (string)$request->getBody('name', '');
@@ -203,6 +221,7 @@ class ApiController
 
     public function deleteCollection(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $colId = (int)($params['id'] ?? 0);
         $this->collectionService->deleteCollection($userId, $colId);
@@ -211,6 +230,7 @@ class ApiController
 
     public function saveRequest(Request $request): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $data = $request->getBody();
 
@@ -238,6 +258,7 @@ class ApiController
 
     public function deleteRequest(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $reqId = (int)($params['id'] ?? 0);
         $this->collectionService->deleteRequest($userId, $reqId);
@@ -270,6 +291,7 @@ class ApiController
 
     public function createEnvironment(Request $request): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $name = (string)$request->getBody('name', '');
         $variables = $request->getBody('variables', []);
@@ -284,6 +306,7 @@ class ApiController
 
     public function updateEnvironment(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $envId = (int)($params['id'] ?? 0);
         $name = (string)$request->getBody('name', '');
@@ -299,6 +322,7 @@ class ApiController
 
     public function deleteEnvironment(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $envId = (int)($params['id'] ?? 0);
         $this->envService->deleteEnvironment($userId, $envId);
@@ -331,6 +355,7 @@ class ApiController
 
     public function deleteHistoryItem(Request $request, array $params): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $historyId = (int)($params['id'] ?? 0);
         $this->historyService->deleteHistoryItem($userId, $historyId);
@@ -339,6 +364,7 @@ class ApiController
 
     public function clearHistory(): void
     {
+        $this->validateCsrf();
         $userId = $this->getUserId();
         $this->historyService->clearHistory($userId);
         Response::success(null, 'History cleared.');
@@ -367,5 +393,152 @@ class ApiController
             'ip' => $request->getClientIp(),
             'timestamp' => time(),
         ], 'Echo response');
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Export / Import
+    // -------------------------------------------------------------------------
+    public function exportCollection(Request $request, array $params): void
+    {
+        $userId = $this->getUserId();
+        $colId = (int)($params['id'] ?? 0);
+
+        $collections = $this->collectionService->getCollectionsWithRequests($userId);
+        $found = null;
+        foreach ($collections as $col) {
+            if ((int)$col['id'] === $colId) {
+                $found = $col;
+                break;
+            }
+        }
+
+        if (!$found) {
+            Response::error('Collection not found.', 404);
+            return;
+        }
+
+        // Fetch full request details with headers, params, tests for each request in collection
+        if (!empty($found['requests']) && is_array($found['requests'])) {
+            foreach ($found['requests'] as &$r) {
+                $details = $this->collectionService->getRequestDetails($userId, (int)$r['id']);
+                if ($details) {
+                    $r = $details;
+                }
+            }
+            unset($r);
+        }
+
+        $export = [
+            'devdock_export' => true,
+            'version' => '1.0',
+            'exported_at' => date('c'),
+            'collection' => $found,
+        ];
+
+        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . preg_replace('/[^a-z0-9_-]/i', '_', $found['name']) . '.json"');
+        echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    public function importCollection(Request $request): void
+    {
+        $this->validateCsrf();
+        $userId = $this->getUserId();
+        $data = $request->getBody();
+
+        if (empty($data['collection'])) {
+            Response::error('Invalid import format. Expected devdock_export JSON.', 422);
+            return;
+        }
+
+        $col = $data['collection'];
+        $name = trim($col['name'] ?? 'Imported Collection');
+        $description = trim($col['description'] ?? '');
+        $requests = $col['requests'] ?? [];
+
+        try {
+            $newCol = $this->collectionService->createCollection($userId, $name . ' (imported)', $description);
+            $imported = 0;
+            foreach ($requests as $req) {
+                $reqData = [
+                    'collection_id' => $newCol['id'],
+                    'name' => $req['name'] ?? 'Untitled',
+                    'method' => $req['method'] ?? 'GET',
+                    'url' => $req['url'] ?? '',
+                    'auth_type' => $req['auth_type'] ?? 'none',
+                    'auth_config' => $req['auth_config'] ?? null,
+                    'body_type' => $req['body_type'] ?? 'none',
+                    'body_content' => $req['body_content'] ?? null,
+                    'headers' => $req['headers'] ?? [],
+                    'params' => $req['params'] ?? [],
+                    'tests' => $req['tests'] ?? [],
+                ];
+                $this->collectionService->saveRequest($userId, $reqData);
+                $imported++;
+            }
+            Response::success(['imported_requests' => $imported, 'collection' => $newCol], 'Collection imported successfully.', 201);
+        } catch (Exception $e) {
+            Response::error($e->getMessage(), 422);
+        }
+    }
+
+    public function generateCurl(Request $request, array $params): void
+    {
+        $userId = $this->getUserId();
+        $reqId = (int)($params['id'] ?? 0);
+        $details = $this->collectionService->getRequestDetails($userId, $reqId);
+
+        if (!$details) {
+            Response::error('Request not found.', 404);
+            return;
+        }
+
+        $method = strtoupper($details['method'] ?? 'GET');
+        $url = $details['url'] ?? '';
+        $headers = $details['headers'] ?? [];
+        $body = $details['body_content'] ?? null;
+        $authType = $details['auth_type'] ?? 'none';
+        $authConfig = is_array($details['auth_config'] ?? null)
+            ? $details['auth_config']
+            : (json_decode($details['auth_config'] ?? '', true) ?: []);
+
+        $parts = ["curl -X {$method}"];
+
+        // Add auth headers
+        if ($authType === 'bearer' && !empty($authConfig['token'])) {
+            $parts[] = '-H "Authorization: Bearer ' . addslashes($authConfig['token']) . '"';
+        } elseif ($authType === 'basic' && !empty($authConfig['username'])) {
+            $parts[] = '-u "' . addslashes($authConfig['username']) . ':' . addslashes($authConfig['password'] ?? '') . '"';
+        } elseif ($authType === 'apikey' && !empty($authConfig['key'])) {
+            $addTo = $authConfig['addTo'] ?? 'header';
+            if ($addTo === 'header') {
+                $parts[] = '-H "' . addslashes($authConfig['key']) . ': ' . addslashes($authConfig['value'] ?? '') . '"';
+            } else {
+                $separator = strpos($url, '?') !== false ? '&' : '?';
+                $url .= $separator . urlencode($authConfig['key']) . '=' . urlencode($authConfig['value'] ?? '');
+            }
+        }
+
+        // Add headers
+        if (is_array($headers)) {
+            foreach ($headers as $h) {
+                if (!empty($h['key']) && (isset($h['is_enabled']) ? (bool)$h['is_enabled'] : true)) {
+                    $parts[] = '-H "' . addslashes($h['key']) . ': ' . addslashes($h['value'] ?? '') . '"';
+                }
+            }
+        }
+
+        // Add body
+        if (!empty($body) && in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
+            $parts[] = '-H "Content-Type: application/json"';
+            $parts[] = "-d '" . str_replace("'", "'\"'\"'", $body) . "'";
+        }
+
+        $parts[] = '"' . $url . '"';
+
+        $curlCommand = implode(" \\\n  ", $parts);
+
+        Response::success(['curl' => $curlCommand, 'method' => $method, 'url' => $url]);
     }
 }

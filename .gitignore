@@ -14,5 +14,7 @@ storage/cache/*
 .DS_Store
 Thumbs.db
 *.tmp
+*.zip
+package.ps1
 .vscode/
 .idea/

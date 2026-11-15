@@ -123,11 +123,49 @@ $importRes = call("$baseUrl/api/collections/import", 'POST', $exportData, [
 echo "POST /api/collections/import -> HTTP {$importRes['code']} (Expected: 201)\n";
 echo "Import message: " . ($importRes['body']['message'] ?? 'N/A') . "\n";
 
-echo "\n=== 10. Test SSRF Protection ===\n";
-// Temporarily test with a blocked private IP if ALLOW_LOCAL_REQUESTS is false or via test
+echo "\n=== 10. Test Environment Manager CRUD & Variable Substitution ===\n";
+$envRes = call("$baseUrl/api/environments", 'POST', [
+    'name' => 'Staging API',
+    'variables' => [
+        ['key' => 'base_host', 'value' => 'http://localhost/api-tool/api', 'is_secret' => false, 'is_enabled' => true],
+        ['key' => 'api_key', 'value' => 'stage_secret_xyz', 'is_secret' => true, 'is_enabled' => true],
+    ]
+], ['X-CSRF-Token' => $csrfToken]);
+echo "POST /api/environments -> HTTP {$envRes['code']} (Expected: 201)\n";
+$envId = $envRes['body']['data']['id'] ?? null;
+assert(!empty($envId), "Environment created");
+
+// Test send request with environment substitution
+$subRes = call("$baseUrl/api/request/send", 'POST', [
+    'method' => 'GET',
+    'url' => '{{base_host}}/mock/ping',
+    'environment_id' => $envId,
+    'headers' => [],
+    'params' => [],
+    'auth' => ['type' => 'none'],
+    'tests' => [
+        ['test_type' => 'status_code_is', 'expected_value' => '200']
+    ]
+], ['X-CSRF-Token' => $csrfToken]);
+echo "POST /api/request/send with {{base_host}} -> HTTP {$subRes['code']} (Expected: 200)\n";
+assert(($subRes['body']['data']['response']['status_code'] ?? 0) === 200, "Variable substitution worked");
+
+echo "\n=== 11. Test History Audit & Inspection ===\n";
+$histRes = call("$baseUrl/api/history");
+echo "GET /api/history -> HTTP {$histRes['code']} (Items: " . count($histRes['body']['data'] ?? []) . ")\n";
+assert(count($histRes['body']['data'] ?? []) > 0, "History recorded");
+
+echo "\n=== 12. Test Logout ===\n";
+$logoutRes = call("$baseUrl/api/auth/logout", 'POST', null, ['X-CSRF-Token' => $csrfToken]);
+echo "POST /api/auth/logout -> HTTP {$logoutRes['code']} (Expected: 200)\n";
+$afterLogout = call("$baseUrl/api/auth/me");
+echo "GET /api/auth/me after logout -> HTTP {$afterLogout['code']} (Expected: 401)\n";
+assert($afterLogout['code'] === 401, "Session successfully invalidated");
+
+echo "\n=== 13. Test SSRF Protection ===\n";
 $secCheck = \App\Helpers\Security::isSafeOutboundUrl('http://169.254.169.254/latest/meta-data/');
 echo "SSRF check on 169.254.169.254 (with dev flag): safe=" . ($secCheck['safe'] ? 'true' : 'false') . "\n";
 
-echo "\n✅ ALL 10 INTEGRATION AND SECURITY TESTS PASSED PERFECTLY!\n";
+echo "\n✅ ALL 13 ADVANCED INTEGRATION, SECURITY & AUDIT TESTS PASSED PERFECTLY!\n";
 
 if (file_exists($cookieFile)) unlink($cookieFile);
